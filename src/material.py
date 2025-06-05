@@ -101,6 +101,23 @@ def _upscale_replicate(x, full_res):
 
 def merge_materials(materials, texcoords, tfaces, mfaces):
     assert len(materials) > 0
+    # for mat in materials:
+    #     assert mat['bsdf'] == materials[0]['bsdf'], "All materials must have the same BSDF (uber shader)"
+    #     assert ('normal' in mat) is ('normal' in materials[0]), "All materials must have either normal map enabled or disabled"
+
+    # ─── PATCH START ─────────────────────────────────────────────────────────────
+    # If some materials have a 'normal' map and some don't, inject
+    # a flat 1×1 normal into those that lack it, so the assertion below passes.
+    has_norm = ['normal' in m for m in materials]
+    if any(has_norm) and not all(has_norm):
+        for m in materials:
+            if 'normal' not in m:
+                dev = m['kd'].data.device
+                # Flat normal (0,0,1) as a 1×1 texture:
+                nm = torch.tensor([[[[0.0, 0.0, 1.0]]]], device=dev)
+                m['normal'] = texture.Texture2D(nm)
+    # ─── PATCH END ────────────────────────────────────────────────────────────────
+
     for mat in materials:
         assert mat['bsdf'] == materials[0]['bsdf'], "All materials must have the same BSDF (uber shader)"
         assert ('normal' in mat) is ('normal' in materials[0]), "All materials must have either normal map enabled or disabled"
