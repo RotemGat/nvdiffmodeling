@@ -14,6 +14,7 @@ from . import util
 from . import texture
 from . import mesh
 
+
 ######################################################################################
 # .mtl material format loading / storing
 ######################################################################################
@@ -33,10 +34,10 @@ def load_mtl(fn, clear_ks=True):
         prefix = split_line[0].lower()
         data = split_line[1:]
         if 'newmtl' in prefix:
-            material = {'name' : data[0]}
+            material = {'name': data[0]}
             materials += [material]
         elif materials:
-            if 'bsdf' in prefix or 'map_kd' in prefix or 'map_ks' in prefix or 'bump' in prefix:
+            if any(k in prefix for k in ('bsdf', 'map_kd', 'map_ks', 'bump', 'map_ns', 'ns', 'ka', 'refl')):
                 material[prefix] = data[0]
             else:
                 material[prefix] = torch.tensor(tuple(float(d) for d in data), dtype=torch.float32, device='cuda')
