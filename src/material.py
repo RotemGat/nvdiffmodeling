@@ -74,22 +74,51 @@ def load_mtl(fn, clear_ks=True):
 def save_mtl(fn, material):
     folder = os.path.dirname(fn)
     with open(fn, "w") as f:
-        f.write('newmtl defaultMat\n')
-        if material is not None:
-            f.write('bsdf   %s\n' % material['bsdf'])
-            f.write('map_kd texture_kd.png\n')
-            texture.save_texture2D(os.path.join(folder, 'texture_kd.png'), texture.rgb_to_srgb(material['kd']))
-            f.write('map_ks texture_ks.png\n')
-            texture.save_texture2D(os.path.join(folder, 'texture_ks.png'), material['ks'])
-            f.write('bump texture_n.png\n')
-            texture.save_texture2D(os.path.join(folder, 'texture_n.png'), material['normal'], lambda_fn=lambda x: (x + 1) * 0.5)
+        f.write("newmtl defaultMat\n")
+
+        # 1) BSDF (if any)
+        if material and material.get("bsdf"):
+            f.write(f"bsdf {material['bsdf']}\n")
+
+        # 2) Diffuse (Kd) + ambient (Ka)
+        if material and material.get("kd"):
+            f.write("map_Kd texture_kd.png\n")
+            texture.save_texture2D(
+                os.path.join(folder, "texture_kd.png"),
+                texture.rgb_to_srgb(material["kd"])
+            )
         else:
-            f.write('Kd 1 1 1\n')
-            f.write('Ks 0 0 0\n')
-            f.write('Ka 0 0 0\n')
-            f.write('Tf 1 1 1\n')
-            f.write('Ni 1\n')
-            f.write('Ns 0\n')
+            f.write("Kd 1 1 1\n")
+        # even if you had a map_Kd, define an ambient fallback
+        f.write("Ka 0 0 0\n")
+
+        # 3) Specular (Ks) + specular exponent (Ns)
+        if material and material.get("ks"):
+            f.write("map_Ks texture_ks.png\n")
+            texture.save_texture2D(
+                os.path.join(folder, "texture_ks.png"),
+                material["ks"]
+            )
+        else:
+            f.write("Ks 0 0 0\n")
+        # default specular exponent
+        f.write("Ns 0\n")
+
+        # 4) Optical density (Ni)
+        # if you want a non-default, you could add material.get("ni") here
+        f.write("Ni 1\n")
+
+        # 5) Transmission filter (Tf)
+        f.write("Tf 1 1 1\n")
+
+        # 6) Normal map (bump)
+        if material and material.get("normal"):
+            f.write("bump texture_n.png\n")
+            texture.save_texture2D(
+                os.path.join(folder, "texture_n.png"),
+                material["normal"],
+                lambda_fn=lambda x: (x + 1) * 0.5
+            )
 
 
 ######################################################################################
