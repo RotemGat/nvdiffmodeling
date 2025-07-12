@@ -7,10 +7,11 @@
 # license agreement from NVIDIA CORPORATION is strictly prohibited.
 
 import os
+import pathlib
+
 import numpy as np
 import torch
 
-from . import util
 from . import texture
 from . import mesh
 from . import material
@@ -143,6 +144,10 @@ def load_obj(filename, clear_ks=True, mtl_override=None):
 ######################################################################################
 
 def write_obj(folder, mesh):
+    if not os.path.exists(folder):
+        folder_path = pathlib.Path(folder)
+        folder_path.mkdir(parents=True, exist_ok=True)
+
     obj_file = os.path.join(folder, 'mesh.obj')
     print("Writing mesh: ", obj_file)
     with open(obj_file, "w") as f:
