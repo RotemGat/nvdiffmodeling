@@ -262,7 +262,7 @@ def auto_normals(mesh):
             v1 = imesh.v_pos[i1, :]
             v2 = imesh.v_pos[i2, :]
 
-            face_normals = torch.cross(v1 - v0, v2 - v0)
+            face_normals = torch.linalg.cross(v1 - v0, v2 - v0)
 
             # Splat face normals to vertices
             v_nrm = torch.zeros_like(imesh.v_pos)
