@@ -37,7 +37,7 @@ def load_mtl(fn, clear_ks=True):
             material = {'name': data[0]}
             materials += [material]
         elif materials:
-            if any(k in prefix for k in ('bsdf', 'map_kd', 'map_ks', 'bump', 'map_ns', 'ns', 'ka', 'refl')):
+            if any(k in prefix for k in ('bsdf', 'map_kd', 'map_ks', 'bump', 'map_ns', 'ns', 'ka', 'refl', 'map_pm', 'map_pr')):
                 material[prefix] = data[0]
             else:
                 material[prefix] = torch.tensor(tuple(float(d) for d in data), dtype=torch.float32, device='cuda')
