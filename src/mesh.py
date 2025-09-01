@@ -13,12 +13,13 @@ import torch
 from . import util
 from . import texture
 
+
 ######################################################################################
 # Base mesh class
 ######################################################################################
 class Mesh:
-    def __init__(self, v_pos=None, t_pos_idx=None, v_nrm=None, t_nrm_idx=None, v_tex=None, t_tex_idx=None, v_tng=None, t_tng_idx=None, 
-    v_weights=None, bone_mtx=None, material=None, base=None):
+    def __init__(self, v_pos=None, t_pos_idx=None, v_nrm=None, t_nrm_idx=None, v_tex=None, t_tex_idx=None, v_tng=None, t_tng_idx=None,
+                 v_weights=None, bone_mtx=None, material=None, base=None):
         self.v_pos = v_pos
         self.v_weights = v_weights
         self.v_nrm = v_nrm
@@ -88,11 +89,13 @@ class Mesh:
     def eval(self, params={}):
         return self
 
+
 ######################################################################################
 # Compute AABB
 ######################################################################################
 def aabb(mesh):
     return torch.min(mesh.v_pos, dim=0).values, torch.max(mesh.v_pos, dim=0).values
+
 
 ######################################################################################
 # Align base mesh to reference mesh:move & rescale to match bounding boxes.
@@ -101,11 +104,23 @@ def unit_size(mesh):
     with torch.no_grad():
         vmin, vmax = aabb(mesh)
         scale = 2 / torch.max(vmax - vmin).item()
-        v_pos = mesh.v_pos - (vmax + vmin) / 2 # Center mesh on origin
-        v_pos = v_pos * scale                  # Rescale to unit size
+        v_pos = mesh.v_pos - (vmax + vmin) / 2  # Center mesh on origin
+        v_pos = v_pos * scale  # Rescale to unit size
         print(f"Scaled object with scale={scale} to get unit size")
 
         return Mesh(v_pos, base=mesh)
+
+
+def unit_size_with_scale(mesh):
+    with torch.no_grad():
+        vmin, vmax = aabb(mesh)
+        scale = 2 / torch.max(vmax - vmin).item()
+        v_pos = mesh.v_pos - (vmax + vmin) / 2  # Center mesh on origin
+        v_pos = v_pos * scale  # Rescale to unit size
+        print(f"Scaled object with scale={scale} to get unit size")
+
+        return Mesh(v_pos, base=mesh), scale
+
 
 ######################################################################################
 # Center & scale mesh for rendering
@@ -119,10 +134,11 @@ def center_by_reference(base_mesh, ref_aabb, scale):
     v_pos = (base_mesh.v_pos - center[None, ...]) * scale
     return Mesh(v_pos, base=base_mesh)
 
+
 ######################################################################################
 # Rescale base-mesh from NDC [-1, 1] space to same dimensions as reference mesh
 ######################################################################################
-def align_with_reference(base_mesh, ref_mesh): # TODO: Fix normals?
+def align_with_reference(base_mesh, ref_mesh):  # TODO: Fix normals?
     class mesh_op_align:
         def __init__(self, base_mesh, ref_mesh):
             self.base_mesh = base_mesh
@@ -140,6 +156,7 @@ def align_with_reference(base_mesh, ref_mesh): # TODO: Fix normals?
 
     return mesh_op_align(base_mesh, ref_mesh)
 
+
 ######################################################################################
 # Skinning
 ######################################################################################
@@ -149,13 +166,14 @@ def _skin_hvec(bone_mtx, weights, attr):
     attr_out = torch.matmul(attr[None, ...], bone_mtx) * torch.transpose(weights, 0, 1)[..., None]
     return attr_out.sum(dim=0)[:, :3]
 
+
 def skinning(mesh):
     class mesh_op_skinning:
         def __init__(self, input):
             self.input = input
-            
+
             mesh = self.input.eval()
-            t_pos_idx = mesh.t_pos_idx.detach().cpu().numpy() 
+            t_pos_idx = mesh.t_pos_idx.detach().cpu().numpy()
             if mesh.t_nrm_idx is not None:
                 self.nrm_remap = self._compute_remap(t_pos_idx, mesh.v_nrm.shape[0], mesh.t_nrm_idx.detach().cpu().numpy())
             if mesh.t_tng_idx is not None:
@@ -168,7 +186,8 @@ def skinning(mesh):
             attr_vtx_idx = [None] * n_attrs
             for ti in range(0, len(t_pos_idx)):
                 for vi in range(0, 3):
-                    assert attr_vtx_idx[t_attr_idx[ti][vi]] is None or attr_vtx_idx[t_attr_idx[ti][vi]] == t_pos_idx[ti][vi], "Trying to skin a mesh with shared normals (normal with 2 sets of skinning weights)"
+                    assert attr_vtx_idx[t_attr_idx[ti][vi]] is None or attr_vtx_idx[t_attr_idx[ti][vi]] == t_pos_idx[ti][
+                        vi], "Trying to skin a mesh with shared normals (normal with 2 sets of skinning weights)"
                     attr_vtx_idx[t_attr_idx[ti][vi]] = t_pos_idx[ti][vi]
 
             return torch.tensor(attr_vtx_idx, dtype=torch.int64, device='cuda')
@@ -181,26 +200,26 @@ def skinning(mesh):
 
             # Compute frame (assume looping animation). Note, bone_mtx is stored [Frame, Bone, ...]
             t_idx = params['time'] if 'time' in params else 0
-            t_idx = (t_idx % imesh.bone_mtx.shape[0]) # Loop animation
-            bone_mtx    = imesh.bone_mtx[t_idx, ...]
+            t_idx = (t_idx % imesh.bone_mtx.shape[0])  # Loop animation
+            bone_mtx = imesh.bone_mtx[t_idx, ...]
             bone_mtx_it = torch.transpose(torch.inverse(bone_mtx), -2, -1)
 
             weights = imesh.v_weights
             assert weights.shape[1] == bone_mtx.shape[0]
 
             # Normalize weights
-            weights = torch.abs(weights) # TODO: This stabilizes training, but I don't know why. All weights are already clamped to >0
+            weights = torch.abs(weights)  # TODO: This stabilizes training, but I don't know why. All weights are already clamped to >0
             weights = weights / torch.sum(weights, dim=1, keepdim=True)
 
             # Skin position
             v_pos_out = _skin_hvec(bone_mtx, weights, util.to_hvec(imesh.v_pos, 1))
-            
+
             # Skin normal
             v_nrm_out = None
             if imesh.v_nrm is not None:
                 v_nrm_out = _skin_hvec(bone_mtx_it, weights[self.nrm_remap, ...], util.to_hvec(imesh.v_nrm, 0))
                 v_nrm_out = util.safe_normalize(v_nrm_out)
-            
+
             # Skin tangent
             v_tng_out = None
             if imesh.v_tng is not None:
@@ -216,28 +235,30 @@ def skinning(mesh):
 
     return mesh_op_skinning(mesh)
 
+
 # Skinning helper functions
 def guess_weights(base_mesh, ref_mesh, N=10):
     base_v_pos = base_mesh.v_pos.detach().cpu().numpy()
     ref_v_pos = ref_mesh.v_pos.detach().cpu().numpy()
     ref_v_weights = ref_mesh.v_weights.detach().cpu().numpy()
     base_v_weights = np.zeros((base_v_pos.shape[0], ref_v_weights.shape[1]), dtype=np.float32)
-    
+
     for v_idx, vtx in enumerate(base_v_pos):
         # Compute distance from current vertex to vertices in ref_mesh
         diff = ref_v_pos - vtx[None, ...]
         dist = np.sum(diff * diff, axis=-1)
-        idxs = np.argpartition(dist, N)        
+        idxs = np.argpartition(dist, N)
 
         # Get the N nearest vertices
         sum_w = 0.0
-        sum_vtx_w = np.zeros_like(ref_v_weights[0,...])
+        sum_vtx_w = np.zeros_like(ref_v_weights[0, ...])
         for i in idxs[:N]:
             sum_w += 1.0 / max(dist[i], 0.001)
             sum_vtx_w += ref_v_weights[i, ...] / max(dist[i], 0.001)
         base_v_weights[v_idx, ...] = sum_vtx_w / sum_w
-    
+
     return base_v_weights
+
 
 def random_weights(base_mesh, ref_mesh):
     init = np.random.uniform(size=(base_mesh.v_pos.shape[0], ref_mesh.v_weights.shape[1]), low=0.0, high=1.0)
@@ -267,9 +288,9 @@ def auto_normals(mesh):
 
             # Splat face normals to vertices
             v_nrm = torch.zeros_like(imesh.v_pos)
-            v_nrm.scatter_add_(0, i0[:, None].repeat(1,3), face_normals)
-            v_nrm.scatter_add_(0, i1[:, None].repeat(1,3), face_normals)
-            v_nrm.scatter_add_(0, i2[:, None].repeat(1,3), face_normals)
+            v_nrm.scatter_add_(0, i0[:, None].repeat(1, 3), face_normals)
+            v_nrm.scatter_add_(0, i1[:, None].repeat(1, 3), face_normals)
+            v_nrm.scatter_add_(0, i2[:, None].repeat(1, 3), face_normals)
 
             # Normalize, replace zero (degenerated) normals with some default value
             v_nrm = torch.where(util.dot(v_nrm, v_nrm) > 1e-20, v_nrm, torch.tensor([0.0, 0.0, 1.0], dtype=torch.float32, device='cuda'))
@@ -279,9 +300,10 @@ def auto_normals(mesh):
             if torch.is_anomaly_enabled():
                 assert torch.all(torch.isfinite(self.v_nrm))
 
-            return Mesh(v_nrm = self.v_nrm, t_nrm_idx=imesh.t_pos_idx, base = imesh)
+            return Mesh(v_nrm=self.v_nrm, t_nrm_idx=imesh.t_pos_idx, base=imesh)
 
     return mesh_op_auto_normals(mesh)
+
 
 ######################################################################################
 # Compute tangent space from texture map coordinates
@@ -298,31 +320,31 @@ def compute_tangents(mesh):
             vn_idx = [None] * 3
             pos = [None] * 3
             tex = [None] * 3
-            for i in range(0,3):
+            for i in range(0, 3):
                 pos[i] = imesh.v_pos[imesh.t_pos_idx[:, i]]
                 tex[i] = imesh.v_tex[imesh.t_tex_idx[:, i]]
                 vn_idx[i] = imesh.t_nrm_idx[:, i]
 
             tangents = torch.zeros_like(imesh.v_nrm)
-            tansum   = torch.zeros_like(imesh.v_nrm)
+            tansum = torch.zeros_like(imesh.v_nrm)
 
             # Compute tangent space for each triangle
             uve1 = tex[1] - tex[0]
             uve2 = tex[2] - tex[0]
-            pe1  = pos[1] - pos[0]
-            pe2  = pos[2] - pos[0]
-            
-            nom   = (pe1 * uve2[..., 1:2] - pe2 * uve1[..., 1:2])
+            pe1 = pos[1] - pos[0]
+            pe2 = pos[2] - pos[0]
+
+            nom = (pe1 * uve2[..., 1:2] - pe2 * uve1[..., 1:2])
             denom = (uve1[..., 0:1] * uve2[..., 1:2] - uve1[..., 1:2] * uve2[..., 0:1])
-            
+
             # Avoid division by zero for degenerated texture coordinates
             tang = nom / torch.where(denom > 0.0, torch.clamp(denom, min=1e-6), torch.clamp(denom, max=-1e-6))
 
             # Update all 3 vertices
-            for i in range(0,3):
-                idx = vn_idx[i][:, None].repeat(1,3)
-                tangents.scatter_add_(0, idx, tang)                # tangents[n_i] = tangents[n_i] + tang
-                tansum.scatter_add_(0, idx, torch.ones_like(tang)) # tansum[n_i] = tansum[n_i] + 1
+            for i in range(0, 3):
+                idx = vn_idx[i][:, None].repeat(1, 3)
+                tangents.scatter_add_(0, idx, tang)  # tangents[n_i] = tangents[n_i] + tang
+                tansum.scatter_add_(0, idx, torch.ones_like(tang))  # tansum[n_i] = tansum[n_i] + 1
             tangents = tangents / tansum
 
             # Normalize and make sure tangent is perpendicular to normal
@@ -338,6 +360,7 @@ def compute_tangents(mesh):
 
     return mesh_op_compute_tangents(mesh)
 
+
 ######################################################################################
 # Subdivide each triangle into 4 new ones. Edge midpoint subdivision
 ######################################################################################
@@ -351,7 +374,7 @@ def subdivide(mesh, steps=1):
             imesh = self.input.eval()
             v_attr = v_attr_orig = [imesh.v_pos, imesh.v_nrm, imesh.v_tex, imesh.v_tng]
             v_idx = v_idx_orig = [imesh.t_pos_idx, imesh.t_nrm_idx, imesh.t_tex_idx, imesh.t_tng_idx]
-            
+
             for i, attr in enumerate(v_attr):
                 if attr is not None:
                     tri_idx = v_idx[i].cpu().numpy()
@@ -370,12 +393,13 @@ def subdivide(mesh, steps=1):
                                 edge_fetch_b += [v1]
 
                     # Create vertex fetch lists for computing midpoint vertices
-                    self.new_vtx_idx[i] = [torch.tensor(edge_fetch_a, dtype=torch.int64, device='cuda'), torch.tensor(edge_fetch_b, dtype=torch.int64, device='cuda')]
+                    self.new_vtx_idx[i] = [torch.tensor(edge_fetch_a, dtype=torch.int64, device='cuda'),
+                                           torch.tensor(edge_fetch_b, dtype=torch.int64, device='cuda')]
 
                     # Create subdivided triangles
                     new_tri_idx = []
                     for tri in tri_idx:
-                        v0, v1, v2= tri
+                        v0, v1, v2 = tri
                         h0 = (edge_verts[(v0, v1)][0] if (v0, v1) in edge_verts.keys() else edge_verts[(v1, v0)][0]) + attr.shape[0]
                         h1 = (edge_verts[(v1, v2)][0] if (v1, v2) in edge_verts.keys() else edge_verts[(v2, v1)][0]) + attr.shape[0]
                         h2 = (edge_verts[(v2, v0)][0] if (v2, v0) in edge_verts.keys() else edge_verts[(v0, v2)][0]) + attr.shape[0]
@@ -393,7 +417,7 @@ def subdivide(mesh, steps=1):
                     # Create new edge midpoint attributes
                     edge_attr = (attr[self.new_vtx_idx[i][0], :] + attr[self.new_vtx_idx[i][1], :]) * 0.5
                     v_attr[i] = torch.cat([attr, edge_attr], dim=0)
-                    
+
                     # Copy new triangle lists
                     v_idx[i] = self.new_tri_idx[i]
 
@@ -410,10 +434,13 @@ def subdivide(mesh, steps=1):
     v_idx_orig = [bm.t_pos_idx, bm.t_nrm_idx, bm.t_tex_idx, bm.t_tng_idx]
     v_idx = [sm.t_pos_idx, sm.t_nrm_idx, sm.t_tex_idx, sm.t_tng_idx]
     print("Subdivided mesh:")
-    print("    Attrs:   [%6d, %6d, %6d, %6d] -> [%6d, %6d, %6d, %6d]" % tuple(list((a.shape[0] if a is not None else 0) for a in v_attr_orig) + list((a.shape[0] if a is not None else 0) for a in v_attr)))
-    print("    Indices: [%6d, %6d, %6d, %6d] -> [%6d, %6d, %6d, %6d]" % tuple(list((a.shape[0] if a is not None else 0) for a in v_idx_orig) + list((a.shape[0] if a is not None else 0) for a in v_idx)))
+    print("    Attrs:   [%6d, %6d, %6d, %6d] -> [%6d, %6d, %6d, %6d]" % tuple(
+        list((a.shape[0] if a is not None else 0) for a in v_attr_orig) + list((a.shape[0] if a is not None else 0) for a in v_attr)))
+    print("    Indices: [%6d, %6d, %6d, %6d] -> [%6d, %6d, %6d, %6d]" % tuple(
+        list((a.shape[0] if a is not None else 0) for a in v_idx_orig) + list((a.shape[0] if a is not None else 0) for a in v_idx)))
 
     return x
+
 
 ######################################################################################
 # Displacement mapping
@@ -425,33 +452,33 @@ def displace(mesh, displacement_map, scale=1.0, keep_connectivity=True):
             self.displacement_map = displacement_map
             self.scale = scale
             self.keep_connectivity = keep_connectivity
-        
+
         def eval(self, params={}):
             imesh = self.input.eval(params)
 
             if self.keep_connectivity:
-                vd   = torch.zeros_like(imesh.v_pos)
+                vd = torch.zeros_like(imesh.v_pos)
                 vd_n = torch.zeros_like(imesh.v_pos)
                 for i in range(0, 3):
                     v = imesh.v_pos[imesh.t_pos_idx[:, i], :]
                     n = imesh.v_nrm[imesh.t_nrm_idx[:, i], :]
                     t = imesh.v_tex[imesh.t_tex_idx[:, i], :]
                     v_displ = v + n * self.scale * util.tex_2d(self.displacement_map, t)
-            
-                    splat_idx = imesh.t_pos_idx[:, i, None].repeat(1,3)
+
+                    splat_idx = imesh.t_pos_idx[:, i, None].repeat(1, 3)
                     vd.scatter_add_(0, splat_idx, v_displ)
                     vd_n.scatter_add_(0, splat_idx, torch.ones_like(v_displ))
 
                 return Mesh(vd / vd_n, base=imesh)
             else:
-                vd   = torch.zeros([imesh.v_tex.shape[0], 3], dtype=torch.float32, device='cuda')
+                vd = torch.zeros([imesh.v_tex.shape[0], 3], dtype=torch.float32, device='cuda')
                 vd_n = torch.zeros([imesh.v_tex.shape[0], 3], dtype=torch.float32, device='cuda')
                 for i in range(0, 3):
                     v = imesh.v_pos[imesh.t_pos_idx[:, i], :]
                     n = imesh.v_nrm[imesh.t_nrm_idx[:, i], :]
                     t = imesh.v_tex[imesh.t_tex_idx[:, i], :]
                     v_displ = v + n * self.scale * util.tex_2d(self.displacement_map, t)
-            
+
                     splat_idx = imesh.t_tex_idx[:, i, None].repeat(1, 3)
                     vd.scatter_add_(0, splat_idx, v_displ)
                     vd_n.scatter_add_(0, splat_idx, torch.ones_like(v_displ))
@@ -488,15 +515,16 @@ def merge(mesh_a, mesh_b):
     elif mesh_a.v_weights is None and mesh_b.v_weights is not None:
         v_weights, bone_mtx = mesh_b.v_weights, mesh_b.bone_mtx
     else:
-        if torch.all(mesh_a.bone_mtx == mesh_b.bone_mtx): # TODO: Wanted to test if same pointer
+        if torch.all(mesh_a.bone_mtx == mesh_b.bone_mtx):  # TODO: Wanted to test if same pointer
             bone_mtx = mesh_a.bone_mtx
             v_weights = torch.cat((mesh_a.v_weights, mesh_b.v_weights), dim=0)
         else:
-            bone_mtx = torch.cat((mesh_a.bone_mtx, mesh_b.bone_mtx), dim=1) # Frame, Bone, ...
-        
+            bone_mtx = torch.cat((mesh_a.bone_mtx, mesh_b.bone_mtx), dim=1)  # Frame, Bone, ...
+
             # Weights need to be increased to account for all bones
-            v_wa = torch.nn.functional.pad(mesh_a.v_weights, [0, mesh_b.v_weights.shape[1]]) #Pad weights_a with shape of weights_b
-            v_wb = torch.nn.functional.pad(mesh_b.v_weights, [mesh_a.v_weights.shape[1], 0]) #Pad weights_b with shape of weights_a
+            v_wa = torch.nn.functional.pad(mesh_a.v_weights, [0, mesh_b.v_weights.shape[1]])  #Pad weights_a with shape of weights_b
+            v_wb = torch.nn.functional.pad(mesh_b.v_weights, [mesh_a.v_weights.shape[1], 0])  #Pad weights_b with shape of weights_a
             v_weights = torch.cat((v_wa, v_wb), dim=0)
 
-    return Mesh(v_pos=v_pos, t_pos_idx=t_pos_idx, v_nrm=v_nrm, t_nrm_idx=t_nrm_idx, v_tng=v_tng, t_tng_idx=t_tng_idx, v_tex=v_tex, t_tex_idx=t_tex_idx, v_weights=v_weights, bone_mtx=bone_mtx, base=mesh_a)
+    return Mesh(v_pos=v_pos, t_pos_idx=t_pos_idx, v_nrm=v_nrm, t_nrm_idx=t_nrm_idx, v_tng=v_tng, t_tng_idx=t_tng_idx, v_tex=v_tex, t_tex_idx=t_tex_idx,
+                v_weights=v_weights, bone_mtx=bone_mtx, base=mesh_a)
