@@ -7,12 +7,13 @@
 # license agreement from NVIDIA CORPORATION is strictly prohibited.
 
 import os
+import traceback
+
 import numpy as np
 import torch
 
 from . import util
 from . import texture
-from . import mesh
 
 
 ######################################################################################
