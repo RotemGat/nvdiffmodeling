@@ -111,17 +111,6 @@ def unit_size(mesh):
         return Mesh(v_pos, base=mesh)
 
 
-def unit_size_with_scale(mesh):
-    with torch.no_grad():
-        vmin, vmax = aabb(mesh)
-        scale = 2 / torch.max(vmax - vmin).item()
-        v_pos = mesh.v_pos - (vmax + vmin) / 2  # Center mesh on origin
-        v_pos = v_pos * scale  # Rescale to unit size
-        print(f"Scaled object with scale={scale} to get unit size")
-
-        return Mesh(v_pos, base=mesh), scale
-
-
 ######################################################################################
 # Center & scale mesh for rendering
 #
