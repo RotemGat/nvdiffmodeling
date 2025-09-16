@@ -40,7 +40,10 @@ def load_mtl(fn, clear_ks=True):
             if any(k in prefix for k in ('bsdf', 'map_kd', 'map_ks', 'bump', 'map_ns', 'ns', 'ka', 'refl', 'map_pm', 'map_pr')):
                 material[prefix] = data[0]
             else:
-                material[prefix] = torch.tensor(tuple(float(d) for d in data), dtype=torch.float32, device='cuda')
+                try:
+                    material[prefix] = torch.tensor(tuple(float(d) for d in data), dtype=torch.float32, device='cuda')
+                except Exception as e:
+                    print(e, traceback.format_exc())
 
     # Convert everything to textures. Our code expects 'kd' and 'ks' to be texture maps. So replace constants with 1x1 maps
     for mat in materials:
