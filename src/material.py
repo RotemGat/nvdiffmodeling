@@ -43,6 +43,8 @@ def load_mtl(fn, clear_ks=True):
             else:
                 try:
                     material[prefix] = torch.tensor(tuple(float(d) for d in data), dtype=torch.float32, device='cuda')
+                except ValueError:
+                    pass
                 except Exception as e:
                     print(e, traceback.format_exc())
 
