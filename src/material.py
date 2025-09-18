@@ -38,7 +38,7 @@ def load_mtl(fn, clear_ks=True):
             material = {'name': data[0]}
             materials += [material]
         elif materials:
-            if any(k in prefix for k in ('bsdf', 'map_kd', 'map_ks', 'bump', 'map_ns', 'ns', 'ka', 'refl', 'map_pm', 'map_pr')):
+            if any(k in prefix for k in ('bsdf', 'map_kd', 'map_ks', 'bump', 'map_ns', 'refl', 'map_refl', 'map_bump')):
                 material[prefix] = data[0]
             else:
                 try:

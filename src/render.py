@@ -118,7 +118,7 @@ def render_layer(
     v0 = mesh.v_pos[mesh.t_pos_idx[:, 0], :]
     v1 = mesh.v_pos[mesh.t_pos_idx[:, 1], :]
     v2 = mesh.v_pos[mesh.t_pos_idx[:, 2], :]
-    face_normals = util.safe_normalize(torch.cross(v1 - v0, v2 - v0))
+    face_normals = util.safe_normalize(torch.linalg.cross(v1 - v0, v2 - v0))
     face_normal_indices = (torch.arange(0, face_normals.shape[0], dtype=torch.int64, device='cuda')[:, None]).repeat(1, 3)
     gb_geometric_normal, _ = interpolate(face_normals[None, ...], rast_out_s, face_normal_indices.int())
 
